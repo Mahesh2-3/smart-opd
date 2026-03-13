@@ -77,6 +77,21 @@ export async function POST(req) {
         }
       }
 
+      // Update Patient's aggregate metrics
+      if (servingToken.patientId) {
+        const patient = await User.findById(servingToken.patientId);
+        if (patient) {
+          const currentTotal = patient.totalConsultations || 0;
+          const currentAvg = patient.avgTimePerConsultation || 15;
+          const newTotal = currentTotal + 1;
+          const newAvg =
+            (currentAvg * currentTotal + durationMinutes) / newTotal;
+          patient.totalConsultations = newTotal;
+          patient.avgTimePerConsultation = Math.round(newAvg);
+          await patient.save();
+        }
+      }
+
       // Update Disease / Cause Analytics
       if (servingToken.cause) {
         let diseaseStats = await Analytics.findOne({

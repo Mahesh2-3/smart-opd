@@ -108,7 +108,9 @@ export default function DoctorDashboard() {
             </div>
 
             <div className="flex gap-4 items-center">
-              <div className="text-sm font-semibold text-slate-500 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200">
+              <button onClick={() => router.push("/doctor/history")} className="text-sm font-bold text-slate-600 hover:text-teal-600 transition-colors">History</button>
+              <button onClick={() => router.push("/doctor/profile")} className="text-sm font-bold text-slate-600 hover:text-teal-600 transition-colors">Profile</button>
+              <div className="text-sm font-semibold text-slate-500 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200 hidden md:block">
                 {user?.specialty || "Specialist"}
               </div>
               <div className="flex items-center gap-2 text-sm font-semibold text-slate-700 bg-slate-100 px-4 py-2 rounded-full border border-slate-200">
