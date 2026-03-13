@@ -146,17 +146,16 @@ export async function POST(req) {
 export async function GET(req) {
   const { searchParams } = new URL(req.url);
   const department = searchParams.get("department");
+  const doctorId = searchParams.get("doctorId");
 
   try {
     await connectDB();
-    if (!department) {
+    if (!department && !doctorId) {
       return NextResponse.json(
-        { error: "Department is required" },
+        { error: "Department or DoctorId is required" },
         { status: 400 },
       );
     }
-
-    const doctorId = searchParams.get("doctorId");
 
     // Get current serving patient and the rest of the queue
     const queryBase = doctorId ? { doctorId } : { department };

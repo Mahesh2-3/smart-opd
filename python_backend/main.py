@@ -28,7 +28,7 @@ async def log_requests(request: Request, call_next):
 # Enable CORS for Next.js frontend (default port 3000)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -85,7 +85,7 @@ def chat_with_assistant(request: ChatRequest):
                     "content": request.message,
                 }
             ],
-            model="llama3-8b-8192",
+            model="llama-3.1-8b-instant",
         )
         return {"response": chat_completion.choices[0].message.content}
     except Exception as e:
