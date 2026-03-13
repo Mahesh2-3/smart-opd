@@ -4,10 +4,26 @@ from pydantic import BaseModel
 import os
 from groq import Groq
 from dotenv import load_dotenv
+import logging
+import time
+from starlette.requests import Request
 
 load_dotenv()
 
 app = FastAPI(title="SOQMS AI Backend", version="1.0.0")
+
+# Setup logging
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+logger = logging.getLogger("fastapi_backend")
+
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    start_time = time.time()
+    logger.info(f"\n[FastAPI Logs] Incoming Request: {request.method} {request.url.path}")
+    response = await call_next(request)
+    process_time = time.time() - start_time
+    logger.info(f"[FastAPI Logs] Completed Request: {request.method} {request.url.path} with status {response.status_code} in {process_time:.4f}s\n")
+    return response
 
 # Enable CORS for Next.js frontend (default port 3000)
 app.add_middleware(
@@ -24,7 +40,9 @@ client = Groq(api_key=os.environ.get("GROQ_API_KEY", ""))
 
 class WaitTimeRequest(BaseModel):
     queue_length: int
-    average_consultation_time: int # in minutes
+    disease_avg_time: int
+    doctor_avg_time: int
+    patient_history_avg_time: int
 
 class ChatRequest(BaseModel):
     message: str
@@ -35,9 +53,19 @@ def read_root():
 
 @app.post("/api/predict-wait-time")
 def predict_wait_time(request: WaitTimeRequest):
-    # Determine wait time (queue_length * average_consultation_time)
-    wait_time = request.queue_length * request.average_consultation_time
-    return {"estimated_wait_time_minutes": wait_time}
+    # Determine wait time using weighted averages
+    base_time = request.doctor_avg_time
+    
+    if request.disease_avg_time > 0:
+        base_time = (base_time + request.disease_avg_time) / 2.0
+    
+    if request.patient_history_avg_time > 0:
+        # Give some weight to how long this specific patient typically takes
+        base_time = (base_time * 0.7) + (request.patient_history_avg_time * 0.3)
+        
+    wait_time_minutes = round(request.queue_length * base_time)
+    
+    return {"estimated_wait_time_minutes": wait_time_minutes}
 
 @app.post("/api/chat")
 def chat_with_assistant(request: ChatRequest):
