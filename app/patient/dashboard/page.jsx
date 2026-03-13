@@ -44,6 +44,32 @@ export default function PatientDashboard() {
     }
     setUser(parsed);
     fetchTokens(parsed._id);
+
+    // Set up WebSocket listeners
+    let socket;
+    let isMounted = true;
+
+    import("socket.io-client").then(({ io }) => {
+      if (!isMounted) return;
+      socket = io();
+
+      socket.on("queue_updated", () => {
+        fetchTokens(parsed._id);
+      });
+
+      socket.on("token_called", () => {
+        fetchTokens(parsed._id);
+      });
+
+      socket.on("consultation_completed", () => {
+        fetchTokens(parsed._id);
+      });
+    });
+
+    return () => {
+      isMounted = false;
+      if (socket) socket.disconnect();
+    };
   }, [router]);
 
   const fetchTokens = async (patientId) => {
@@ -87,7 +113,7 @@ export default function PatientDashboard() {
       const res = await fetch("http://127.0.0.1:8000/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: chatMessage }),
+        body: JSON.stringify({ message: chatMessage, patient_id: user._id }),
       });
       if (res.ok) {
         const data = await res.json();

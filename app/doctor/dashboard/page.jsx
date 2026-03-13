@@ -35,8 +35,38 @@ export default function DoctorDashboard() {
   useEffect(() => {
     if (!user) return;
     fetchQueue();
-    const interval = setInterval(fetchQueue, 5000);
-    return () => clearInterval(interval);
+
+    // Set up WebSocket listeners
+    let socket;
+    let isMounted = true;
+
+    import("socket.io-client").then(({ io }) => {
+      if (!isMounted) return;
+      socket = io();
+
+      socket.on("queue_updated", (data) => {
+        if (data.doctorId === user._id || !data.doctorId) {
+          fetchQueue();
+        }
+      });
+
+      socket.on("token_called", (data) => {
+        if (data.doctorId === user._id || !data.doctorId) {
+          fetchQueue();
+        }
+      });
+
+      socket.on("consultation_completed", (data) => {
+        if (data.doctorId === user._id || !data.doctorId) {
+          fetchQueue();
+        }
+      });
+    });
+
+    return () => {
+      isMounted = false;
+      if (socket) socket.disconnect();
+    };
   }, [user]);
 
   const fetchQueue = async () => {
