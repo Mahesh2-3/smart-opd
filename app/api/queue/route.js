@@ -3,6 +3,14 @@ import connectDB from "@/lib/mongodb";
 import Appointment from "@/models/Appointment";
 import User from "@/models/User";
 import Analytics from "@/models/Analytics";
+import ConsultationAnalytics from "@/models/ConsultationAnalytics";
+import { io } from "socket.io-client";
+import redis from "@/lib/redis";
+import logger from "@/lib/logger";
+
+// Connect to the local socket server
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
+const socket = io(SITE_URL);
 
 export async function POST(req) {
   try {
@@ -34,6 +42,46 @@ export async function POST(req) {
       nextToken.startedTime = new Date();
       await nextToken.save();
 
+      // Recalculate queue positions and estimated times for the remaining waiting tokens
+      const remainingTokens = await Appointment.find({
+        doctorId: doctorId || nextToken.doctorId,
+        status: "waiting",
+      }).sort({ queuePosition: 1 });
+
+      let accumulatedTime = 0;
+      let doctorAvg = 15;
+      const currentDoctorId = doctorId || nextToken.doctorId;
+
+      if (currentDoctorId) {
+        const cachedAvg = await redis.get(`doctor:avg_time:${currentDoctorId}`).catch(() => null);
+        if (cachedAvg) {
+          doctorAvg = parseInt(cachedAvg, 10);
+        } else {
+          doctorAvg = (await User.findById(currentDoctorId))?.avgTimePerConsultation || 15;
+          await redis.setex(`doctor:avg_time:${currentDoctorId}`, 60, doctorAvg.toString()).catch(() => null);
+        }
+      }
+
+      for (let i = 0; i < remainingTokens.length; i++) {
+        remainingTokens[i].queuePosition = i + 1;
+
+        // Simulation engine logic: predict wait time using complexity and avg
+        const complexityWeight = 1.0; // fallback to 1.0 for now
+
+        accumulatedTime += doctorAvg * complexityWeight;
+        remainingTokens[i].estimatedWaitTime = Math.round(accumulatedTime);
+        await remainingTokens[i].save();
+      }
+
+      // Broadcast WebSocket events
+      socket.emit("token_called", { doctorId: currentDoctorId, token: nextToken });
+      socket.emit("queue_updated", { doctorId: currentDoctorId });
+
+      // Invalidate Redis Cache
+      if (currentDoctorId) {
+        await redis.del(`queue:${currentDoctorId}`).catch(() => null);
+      }
+
       return NextResponse.json(
         { message: "Called next patient", token: nextToken },
         { status: 200 },
@@ -62,6 +110,20 @@ export async function POST(req) {
       servingToken.durationMinutes = durationMinutes;
       await servingToken.save();
 
+      // Record consultation analytics
+      if (servingToken.doctorId && servingToken.patientId) {
+        await ConsultationAnalytics.create({
+          doctor_id: servingToken.doctorId,
+          patient_id: servingToken.patientId,
+          token_id: servingToken._id,
+          consultation_start: servingToken.startedTime || new Date(Date.now() - durationMinutes * 60000),
+          consultation_end: servingToken.completedTime,
+          duration: durationMinutes,
+          disease_type: servingToken.cause || "General",
+          complexity_score: 1.0 // default for now, can be modified by actual complexity if tracked
+        });
+      }
+
       // Update Doctor's aggregate metrics
       if (servingToken.doctorId) {
         const doctor = await User.findById(servingToken.doctorId);
@@ -74,6 +136,9 @@ export async function POST(req) {
           doctor.totalConsultations = newTotal;
           doctor.avgTimePerConsultation = Math.round(newAvg);
           await doctor.save();
+
+          // Invalidate doctor average cache
+          await redis.del(`doctor:avg_time:${servingToken.doctorId}`).catch(() => null);
         }
       }
 
@@ -121,12 +186,40 @@ export async function POST(req) {
         status: "waiting",
       }).sort({ queuePosition: 1 });
 
+      let accumulatedTime = 0;
+      let queueDoctorAvg = 15;
+
+      if (servingToken.doctorId) {
+        const cachedAvg = await redis.get(`doctor:avg_time:${servingToken.doctorId}`).catch(() => null);
+        if (cachedAvg) {
+          queueDoctorAvg = parseInt(cachedAvg, 10);
+        } else {
+          queueDoctorAvg = (await User.findById(servingToken.doctorId))?.avgTimePerConsultation || 15;
+          await redis.setex(`doctor:avg_time:${servingToken.doctorId}`, 60, queueDoctorAvg.toString()).catch(() => null);
+        }
+      }
+
       for (let i = 0; i < remainingTokens.length; i++) {
         remainingTokens[i].queuePosition = i + 1;
-        // Optionally logic can inject the more accurate python AI wait time later, fallback hardcoded for now locally
-        remainingTokens[i].estimatedWaitTime = (i + 1) * 15;
+
+        // Simulation engine logic: predict wait time using complexity and avg
+        const complexityWeight = 1.0;
+
+        accumulatedTime += queueDoctorAvg * complexityWeight;
+        remainingTokens[i].estimatedWaitTime = Math.round(accumulatedTime);
         await remainingTokens[i].save();
       }
+
+      // Broadcast WebSocket events
+      socket.emit("consultation_completed", { doctorId: servingToken.doctorId, tokenId });
+      socket.emit("queue_updated", { doctorId: servingToken.doctorId });
+
+      // Invalidate Redis Cache
+      if (servingToken.doctorId) {
+        await redis.del(`queue:${servingToken.doctorId}`).catch(() => null);
+      }
+
+      logger.info("consultation_completed", { doctorId: servingToken.doctorId, tokenId });
 
       return NextResponse.json(
         { message: "Consultation finished" },

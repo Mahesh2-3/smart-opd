@@ -49,8 +49,27 @@ export default function DisplayScreen() {
     }
 
     fetchAllQueues();
-    const interval = setInterval(fetchAllQueues, 3000); // Poll every 3 seconds for real-time feel
-    return () => clearInterval(interval);
+
+    // Use WebSockets for real-time updates instead of polling
+    let socket;
+    let isMounted = true;
+    import("socket.io-client").then(({ io }) => {
+      if (!isMounted) return;
+      socket = io();
+
+      socket.on("queue_updated", () => {
+        fetchAllQueues();
+      });
+
+      socket.on("token_called", (data) => {
+        fetchAllQueues();
+      });
+    });
+
+    return () => {
+      isMounted = false;
+      if (socket) socket.disconnect();
+    };
   }, [departments]);
 
   return (
@@ -129,17 +148,17 @@ export default function DisplayScreen() {
               {/* Up Next Ribbon */}
               <div className="bg-slate-900/80 border-t border-slate-700 p-4">
                 <div className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3 flex items-center justify-between">
-                  <span>Up Next</span>
+                  <span>NEXT 3 TOKENS</span>
                   {queue.length > 0 && (
-                    <span className="text-blue-400">{queue.length} Wait</span>
+                    <span className="text-blue-400">AVG WAIT TIME: {queue.length > 0 ? queue[0].estimatedWaitTime || 15 : 0}M</span>
                   )}
                 </div>
 
-                <div className="flex gap-2 overflow-hidden h-[48px]">
+                <div className="flex gap-2 overflow-hidden h-[48px] transition-all duration-500 ease-in-out">
                   {queue.slice(0, 3).map((token, i) => (
                     <div
                       key={token._id}
-                      className="bg-slate-800 border border-slate-700 rounded-xl flex-1 flex items-center justify-center text-xl font-bold font-mono text-slate-300"
+                      className="bg-slate-800 border border-slate-700 rounded-xl flex-1 flex items-center justify-center text-xl font-bold font-mono text-slate-300 transition-transform duration-500 transform hover:scale-105"
                       style={{ opacity: 1 - i * 0.25 }}
                     >
                       {token.tokenNumber}
