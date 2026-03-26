@@ -31,6 +31,10 @@ export default function PatientDashboard() {
   const [chatLoading, setChatLoading] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false);
 
+  // Turn signal state
+  const [showTurnSignal, setShowTurnSignal] = useState(false);
+  const [calledToken, setCalledToken] = useState(null);
+
   useEffect(() => {
     const userData = localStorage.getItem("user");
     if (!userData) {
@@ -57,7 +61,20 @@ export default function PatientDashboard() {
         fetchTokens(parsed._id);
       });
 
-      socket.on("token_called", () => {
+      socket.on("token_called", (data) => {
+        if (data && data.token && data.token.patientId === parsed._id) {
+          setShowTurnSignal(true);
+          setCalledToken(data.token.tokenNumber);
+          
+          if ("speechSynthesis" in window) {
+            const utterance = new SpeechSynthesisUtterance(
+              `Token number ${
+                data.token.tokenNumber.split("-").join(" ")
+              }, it is your turn. Please proceed to the doctor.`
+            );
+            window.speechSynthesis.speak(utterance);
+          }
+        }
         fetchTokens(parsed._id);
       });
 
@@ -448,6 +465,33 @@ export default function PatientDashboard() {
           </div>
         )}
       </div>
+      {/* Turn Signal Modal */}
+      {showTurnSignal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm animate-in fade-in duration-300">
+          <div className="bg-white p-8 rounded-[3rem] shadow-2xl max-w-lg w-full mx-4 text-center transform animate-in zoom-in-95 duration-500 border-4 border-emerald-500 relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-full h-2 bg-emerald-500 animate-pulse"></div>
+            
+            <div className="w-24 h-24 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-6 shadow-inner">
+              <AlertCircle className="w-12 h-12 text-emerald-600 animate-pulse" />
+            </div>
+            
+            <h2 className="text-4xl font-black text-slate-800 mb-2 uppercase tracking-tight">It&apos;s Your Turn!</h2>
+            <p className="text-xl text-slate-600 mb-8 font-medium">Please proceed to the consultation room.</p>
+            
+            <div className="bg-emerald-50 border border-emerald-200 rounded-3xl p-6 mb-8">
+              <div className="text-sm font-bold tracking-widest text-emerald-600 uppercase mb-2">Token Called</div>
+              <div className="text-6xl font-black font-mono text-emerald-700 tracking-tighter drop-shadow-sm">{calledToken || activeToken?.tokenNumber}</div>
+            </div>
+            
+            <button 
+              onClick={() => setShowTurnSignal(false)}
+              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xl py-5 rounded-2xl shadow-lg hover:shadow-xl transition-all transform hover:-translate-y-1"
+            >
+              I am on my way
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
