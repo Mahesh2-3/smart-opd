@@ -3,10 +3,14 @@ import connectDB from "@/lib/mongodb";
 import Appointment from "@/models/Appointment";
 import User from "@/models/User";
 import Analytics from "@/models/Analytics";
+import { io } from "socket.io-client";
+
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
+const socket = io(SITE_URL);
 
 export async function POST(req) {
   try {
-    const { patientId, doctorId, department, cause } = await req.json();
+    const { patientId, doctorId, department, cause, isEmergency, requestedTime } = await req.json();
     await connectDB();
 
     if (!patientId || !doctorId || !department || !cause) {
@@ -31,11 +35,28 @@ export async function POST(req) {
     }
 
     // Determine queue position
-    const count = await Appointment.countDocuments({
-      doctorId,
-      status: "waiting",
-    });
-    const queuePosition = count + 1;
+    let queuePosition;
+    if (isEmergency) {
+       // Emergencies go after any currently serving or existing emergencies
+       const emergencyCount = await Appointment.countDocuments({
+          doctorId,
+          status: "waiting",
+          isEmergency: true
+       });
+       queuePosition = emergencyCount + 1;
+
+       // Shift non-emergency waiting appointments back
+       await Appointment.updateMany(
+           { doctorId, status: "waiting", isEmergency: false },
+           { $inc: { queuePosition: 1 } }
+       );
+    } else {
+       const count = await Appointment.countDocuments({
+         doctorId,
+         status: "waiting",
+       });
+       queuePosition = count + 1;
+    }
 
     // Generate token number (simple logic: DeptPrefix + DoctorInitials + Number)
     const deptPrefix = department.substring(0, 3).toUpperCase();
@@ -81,10 +102,31 @@ export async function POST(req) {
       doctorId,
       department,
       cause,
+      isEmergency: !!isEmergency,
+      requestedTime: requestedTime || 0,
       tokenNumber,
       queuePosition,
       estimatedWaitTime,
     });
+
+    // Recalculate wait times for all waiting tokens if a new emergency was inserted
+    // Or if requestedTime was provided, it might impact others' wait times
+    const remainingTokens = await Appointment.find({
+      doctorId,
+      status: "waiting",
+    }).sort({ queuePosition: 1 });
+
+    let accumulatedTime = 0;
+    for (let i = 0; i < remainingTokens.length; i++) {
+      remainingTokens[i].queuePosition = i + 1; // Double check positions
+      const timeForThisToken = remainingTokens[i].requestedTime > 0 ? remainingTokens[i].requestedTime : doctor_avg_time;
+      accumulatedTime += timeForThisToken;
+      remainingTokens[i].estimatedWaitTime = accumulatedTime;
+      await remainingTokens[i].save();
+    }
+
+    // Notify clients of queue change
+    socket.emit("queue_updated", { doctorId });
 
     return NextResponse.json(
       {

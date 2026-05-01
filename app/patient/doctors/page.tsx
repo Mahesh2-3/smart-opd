@@ -35,6 +35,8 @@ export default function DoctorsList() {
   // Booking Modal
   const [bookingDoc, setBookingDoc] = useState<DoctorData | null>(null);
   const [cause, setCause] = useState("");
+  const [isEmergency, setIsEmergency] = useState(false);
+  const [requestedTime, setRequestedTime] = useState("");
   const [bookingLoading, setBookingLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -88,6 +90,8 @@ export default function DoctorsList() {
           doctorId: bookingDoc._id,
           department: bookingDoc.specialty,
           cause,
+          isEmergency,
+          requestedTime: requestedTime ? parseInt(requestedTime, 10) : 0,
         }),
       });
 
@@ -214,10 +218,18 @@ export default function DoctorsList() {
                     <label className="block text-sm font-medium text-slate-700 mb-2">Reason for visit (Disease or Symptom)</label>
                     <input type="text" value={cause} onChange={(e) => setCause(e.target.value)} placeholder="e.g. Fever and Cough" className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none" autoFocus />
                  </div>
+                 <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">Requested Time (Minutes - Optional)</label>
+                    <input type="number" value={requestedTime} onChange={(e) => setRequestedTime(e.target.value)} placeholder="e.g. 15" min="1" className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none" />
+                 </div>
+                 <div className="flex items-center gap-2">
+                    <input type="checkbox" id="emergency" checked={isEmergency} onChange={(e) => setIsEmergency(e.target.checked)} className="w-4 h-4 text-red-600 bg-gray-100 border-gray-300 rounded focus:ring-red-500" />
+                    <label htmlFor="emergency" className="text-sm font-medium text-red-600">Mark as Emergency</label>
+                 </div>
               </div>
 
               <div className="mt-8 flex gap-3">
-                 <button onClick={() => { setBookingDoc(null); setError(""); setCause(""); }} className="flex-1 py-3 px-4 rounded-xl border border-slate-300 text-slate-700 font-bold hover:bg-slate-50 transition-colors">
+                 <button onClick={() => { setBookingDoc(null); setError(""); setCause(""); setIsEmergency(false); setRequestedTime(""); }} className="flex-1 py-3 px-4 rounded-xl border border-slate-300 text-slate-700 font-bold hover:bg-slate-50 transition-colors">
                    Cancel
                  </button>
                  <button onClick={handleBook} disabled={bookingLoading} className="flex-1 py-3 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold transition-colors flex items-center justify-center gap-2">
