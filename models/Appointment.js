@@ -7,6 +7,8 @@ const AppointmentSchema = new mongoose.Schema(
     tokenNumber: { type: String, required: true, unique: true },
     status: { type: String, enum: ["waiting", "serving", "finished", "cancelled"], default: "waiting" },
     cause: { type: String, required: true }, // Disease or reason for visit
+    isEmergency: { type: Boolean, default: false },
+    requestedTime: { type: Number, default: 0 },
     startedTime: { type: Date, default: null },
     completedTime: { type: Date, default: null },
     durationMinutes: { type: Number, default: 0 },

@@ -68,7 +68,8 @@ export async function POST(req) {
         // Simulation engine logic: predict wait time using complexity and avg
         const complexityWeight = 1.0; // fallback to 1.0 for now
 
-        accumulatedTime += doctorAvg * complexityWeight;
+        const timeForThisToken = remainingTokens[i].requestedTime > 0 ? remainingTokens[i].requestedTime : doctorAvg;
+        accumulatedTime += timeForThisToken * complexityWeight;
         remainingTokens[i].estimatedWaitTime = Math.round(accumulatedTime);
         await remainingTokens[i].save();
       }
@@ -205,7 +206,8 @@ export async function POST(req) {
         // Simulation engine logic: predict wait time using complexity and avg
         const complexityWeight = 1.0;
 
-        accumulatedTime += queueDoctorAvg * complexityWeight;
+        const timeForThisToken = remainingTokens[i].requestedTime > 0 ? remainingTokens[i].requestedTime : queueDoctorAvg;
+        accumulatedTime += timeForThisToken * complexityWeight;
         remainingTokens[i].estimatedWaitTime = Math.round(accumulatedTime);
         await remainingTokens[i].save();
       }
